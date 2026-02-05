@@ -1,7 +1,5 @@
 # 🚀 MLOps Core - Pipeline End-to-End
 
-> Cycle de vie ML automatisé : CI/CD, orchestration et observabilité en production.
-
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-Educational-lightgrey.svg)](LICENSE)
