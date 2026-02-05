@@ -1,6 +1,5 @@
 """
 Tests unitaires pour l'API FastAPI
-Semaine 1 - MLOps Formation
 """
 
 import json

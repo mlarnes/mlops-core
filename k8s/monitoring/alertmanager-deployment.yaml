@@ -1,0 +1,86 @@
+# Deployment AlertManager : Gère les alertes et envoie les notifications
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: mlops
+  labels:
+    app: alertmanager
+    component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        component: monitoring
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        imagePullPolicy: IfNotPresent
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+          - '--web.external-url=http://alertmanager-service.mlops.svc.cluster.local:9093'
+        ports:
+        - containerPort: 9093
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: alertmanager-config
+          mountPath: /etc/alertmanager
+        - name: alertmanager-storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: alertmanager-config
+        configMap:
+          name: alertmanager-config
+      - name: alertmanager-storage
+        emptyDir: {}  # En production, utiliser un PersistentVolume
+
+---
+# Service AlertManager : Expose l'UI et l'API
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-service
+  namespace: mlops
+  labels:
+    app: alertmanager
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9093
+    targetPort: 9093
+    protocol: TCP
+    name: http
+  selector:
+    app: alertmanager

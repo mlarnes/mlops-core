@@ -283,3 +283,10 @@ celerybeat.pid
 
 # mkdocs
 /site
+
+# ============================================================================
+# Kubernetes - Secrets (ne doivent pas entrer dans l'image)
+# ============================================================================
+
+k8s/secret.yaml
+k8s/*secret*.yaml

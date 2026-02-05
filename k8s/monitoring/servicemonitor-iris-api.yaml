@@ -1,0 +1,20 @@
+# ServiceMonitor : Décrit comment Prometheus doit scraper les métriques de l'API Iris
+# Nécessite Prometheus Operator pour fonctionner automatiquement
+# Alternative : Configuration manuelle dans prometheus.yml (déjà fait dans prometheus-configmap.yaml)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: iris-api
+  namespace: mlops
+  labels:
+    app: iris-api
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: iris-api  # Sélectionne le Service iris-api-service
+  endpoints:
+  - port: http  # Port nommé dans le Service
+    path: /metrics  # Chemin des métriques Prometheus
+    interval: 15s  # Fréquence de scraping
+    scrapeTimeout: 10s

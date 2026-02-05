@@ -1,6 +1,5 @@
 """
 Script de préparation des données pour le dataset Iris
-Utilisé dans le pipeline DVC (Semaine 4)
 Lit les paramètres depuis params.yaml avec validation Pydantic
 """
 

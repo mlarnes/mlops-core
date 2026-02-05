@@ -1,6 +1,5 @@
 """
 Tests unitaires pour le modèle ML
-Semaine 1 - MLOps Formation
 """
 
 import json

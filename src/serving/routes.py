@@ -31,7 +31,7 @@ def register_routes(app: FastAPI):
         ⚠️ Note : Cet endpoint n'exige pas d'authentification (information publique).
         """
         return {
-            "message": "API Classification Iris - Semaine 1 MLOps",
+            "message": "API Classification Iris",
             "docs": "/docs",
             "health": "/health",
             "security": "Cette API utilise l'authentification par API key. Fournissez votre clé via le header X-API-Key",

@@ -1,0 +1,57 @@
+# Ingress : Reverse Proxy HTTP/HTTPS pour exposition externe (production)
+# Permet : routage par domaine, TLS, rate limiting, CORS, WAF
+# ⚠️ Prérequis : Ingress Controller installé (nginx, traefik, etc.)
+# Installation nginx : kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: iris-api-ingress
+  namespace: mlops
+  labels:
+    app: iris-api
+    component: ingress
+  annotations:
+    # Annotations pour nginx-ingress (varient selon le controller utilisé)
+    
+    # Sécurité : Force HTTPS
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    
+    # Rate Limiting : Protection DDoS (IMPORTANT en prod)
+    # nginx.ingress.kubernetes.io/limit-rps: "100"           # Max 100 req/s par IP
+    # nginx.ingress.kubernetes.io/limit-connections: "10"    # Max 10 connexions simultanées
+    
+    # Timeouts : Ajuster selon temps de réponse de l'API
+    # nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    
+    # CORS : Si appel depuis navigateur web
+    # ⚠️ JAMAIS "*" en production, toujours spécifier les domaines autorisés
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.example.com"
+    # nginx.ingress.kubernetes.io/cors-allow-methods: "GET,POST,OPTIONS"
+    # nginx.ingress.kubernetes.io/cors-allow-headers: "X-API-Key,Content-Type"
+    
+spec:
+  ingressClassName: nginx        # Type de controller (nginx, traefik, istio, etc.)
+  rules:
+  - host: iris-api.example.com   # ⚠️ Remplacer par votre domaine réel
+    http:
+      paths:
+      - path: /                  # Route tous les chemins (/, /predict, /health, etc.)
+        pathType: Prefix         # Prefix = match /path* | Exact = match exact
+        backend:
+          service:
+            name: iris-api-service  # Service ClusterIP à cibler
+            port:
+              number: 8000
+  
+  # TLS : HTTPS avec certificat (recommandé en production)
+  # Générer cert avec cert-manager ou fournir manuellement
+  # tls:
+  # - hosts:
+  #   - iris-api.example.com
+  #   secretName: iris-api-tls   # Secret contenant tls.crt et tls.key
+

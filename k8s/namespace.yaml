@@ -1,0 +1,11 @@
+# Namespace : Isolation logique des ressources (comme un dossier dans le cluster)
+# Permet de séparer les environnements (dev/staging/prod) ou les projets
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlops                    # Nom unique du namespace
+  labels:
+    name: mlops                  # Labels pour recherche/filtrage
+    environment: production
+    managed-by: kubernetes
+

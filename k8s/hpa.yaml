@@ -1,0 +1,53 @@
+# HPA : Horizontal Pod Autoscaler - Scale automatique selon charge (CPU/RAM)
+# Ajuste dynamiquement le nombre de replicas entre min/max selon les métriques
+# ⚠️ Prérequis : metrics-server installé dans le cluster
+# kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: iris-api-hpa
+  namespace: mlops
+  labels:
+    app: iris-api
+    component: autoscaler
+spec:
+  scaleTargetRef:                # Cible : quel Deployment scaler ?
+    apiVersion: apps/v1
+    kind: Deployment
+    name: iris-api               # Doit matcher le nom du Deployment
+  
+  minReplicas: 2                 # Minimum de Pods (haute dispo)
+  maxReplicas: 10                # Maximum de Pods (limite scale-out)
+  
+  metrics:                       # Métriques déclenchant le scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70   # Si CPU moyen > 70% → scale up
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80   # Si RAM moyenne > 80% → scale up
+  
+  behavior:                      # Comportement du scaling (éviter flapping)
+    scaleDown:                   # Descaling : prudent
+      stabilizationWindowSeconds: 300  # Attend 5 min avant descaler
+      policies:
+      - type: Percent
+        value: 50                # Max -50% de pods par période
+        periodSeconds: 60
+    scaleUp:                     # Upscaling : réactif
+      stabilizationWindowSeconds: 0    # Pas d'attente
+      policies:
+      - type: Percent
+        value: 100               # Max +100% par période
+        periodSeconds: 15
+      - type: Pods
+        value: 2                 # OU +2 pods (le plus restrictif gagne)
+        periodSeconds: 15
+

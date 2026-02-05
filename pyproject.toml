@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "mlops-iris-api"
 version = "1.0.0"
-description = "API FastAPI pour la classification d'iris - Semaine 1 MLOps"
+description = "API FastAPI pour la classification d'iris"
 authors = ["Formation MLOps <formation@mlops.com>"]
 readme = "README.md"
 packages = [{include = "src"}]

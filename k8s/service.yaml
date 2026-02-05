@@ -1,0 +1,28 @@
+# Service : Expose les Pods et fournit un DNS stable + Load Balancing
+# Même si les Pods meurent/redémarrent, le Service reste accessible à la même adresse
+apiVersion: v1
+kind: Service
+metadata:
+  name: iris-api-service         # Devient un DNS : iris-api-service.mlops.svc.cluster.local
+  namespace: mlops
+  labels:
+    app: iris-api
+    component: service
+spec:
+  type: ClusterIP                # IP interne SEULEMENT (défaut, le plus sécurisé)
+                                 # Autres types possibles :
+                                 # - NodePort : expose sur chaque node (dev/test)
+                                 # - LoadBalancer : IP publique cloud (prod simple)
+                                 # Pour prod avancée → utiliser Ingress (voir ingress.yaml)
+  
+  ports:
+  - port: 8000                   # Port du Service (ce qu'on appelle)
+    targetPort: 8000             # Port du Container (où l'app écoute)
+    protocol: TCP
+    name: http
+    
+  selector:                      # Sélectionne les Pods à exposer (IMPORTANT !)
+    app: iris-api                # Tous les Pods avec label app=iris-api
+  
+  sessionAffinity: None          # None = Load Balancing pur (round-robin)
+                                 # ClientIP = sticky sessions (même client → même pod)

@@ -1,0 +1,19 @@
+# ConfigMap : Configuration NON-SENSIBLE (stockée en clair, visible par tous)
+# Usage : Variables d'environnement publiques, fichiers de config
+# ⚠️ Ne JAMAIS mettre de secrets ici (mots de passe, clés API) → utiliser Secret
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iris-api-config          # Nom référencé dans deployment.yaml
+  namespace: mlops
+  labels:
+    app: iris-api                # Permet de retrouver toutes les ressources de l'app
+    component: config
+data:                            # Données en clair (clé: valeur)
+  ENVIRONMENT: "production"
+  MODEL_DIR: "/app/models"
+  LOG_LEVEL: "INFO"              # DEBUG | INFO | WARNING | ERROR
+  # Origines CORS autorisées en production
+  # 🔒 Ne jamais utiliser "*" en production (bloqué par le code)
+  # Adapter cette valeur selon votre front-end (ex: https://example.com)
+  CORS_ORIGINS: "http://localhost:3000"

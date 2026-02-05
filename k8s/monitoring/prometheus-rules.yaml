@@ -1,0 +1,114 @@
+# Règles d'alerte Prometheus : Définissent quand déclencher une alerte
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: mlops
+  labels:
+    app: prometheus
+    component: monitoring
+data:
+  api-alerts.yml: |
+    groups:
+      - name: iris-api
+        interval: 30s
+        rules:
+          # Total des alertes actives : 6 (HighLatency désactivée car métrique non disponible)
+          # Alerte : API down (pas de métriques depuis 1 minute)
+          - alert: IrisAPIDown
+            expr: up{job="iris-api"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              component: api
+            annotations:
+              summary: "Iris API is down"
+              description: "L'API Iris n'expose plus de métriques depuis 1 minute. Vérifier les logs et le statut des pods."
+          
+          # Alerte : Taux d'erreur élevé (> 5% sur 5 minutes)
+          - alert: HighErrorRate
+            expr: |
+              rate(api_errors_total[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+              component: api
+            annotations:
+              summary: "High error rate detected"
+              description: "Le taux d'erreur de l'API est supérieur à 5% sur les 5 dernières minutes."
+          
+          # Alerte : Latence élevée (p95 > 1s)
+          # NOTE: Cette alerte nécessite l'ajout d'une métrique de latence HTTP dans l'API
+          # Pour l'instant, cette alerte est désactivée car la métrique n'est pas exposée
+          # - alert: HighLatency
+          #   expr: |
+          #     histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+          #   for: 5m
+          #   labels:
+          #     severity: warning
+          #     component: api
+          #   annotations:
+          #     summary: "High latency detected"
+          #     description: "La latence p95 de l'API dépasse 1 seconde sur les 5 dernières minutes."
+          
+          # Alerte : Modèle non chargé
+          - alert: ModelNotLoaded
+            expr: model_loaded == 0
+            for: 2m
+            labels:
+              severity: critical
+              component: model
+            annotations:
+              summary: "Model not loaded"
+              description: "Le modèle ML n'est pas chargé dans l'API depuis 2 minutes. L'API ne peut pas faire de prédictions."
+          
+          # Alerte : Taux de prédictions anormalement bas
+          - alert: LowPredictionRate
+            expr: |
+              rate(model_predictions_total[10m]) < 0.1
+            for: 10m
+            labels:
+              severity: info
+              component: api
+            annotations:
+              summary: "Low prediction rate"
+              description: "Le taux de prédictions est très bas (< 0.1/min) sur les 10 dernières minutes. Vérifier le trafic."
+      
+      - name: kubernetes
+        interval: 30s
+        rules:
+          # Alerte : Pod en CrashLoopBackOff
+          - alert: PodCrashLooping
+            expr: |
+              kube_pod_container_status_restarts_total > 3
+            for: 5m
+            labels:
+              severity: warning
+              component: kubernetes
+            annotations:
+              summary: "Pod is crash looping"
+              description: "Le pod {{ $labels.pod }} redémarre en boucle ({{ $value }} redémarrages)."
+          
+          # Alerte : Utilisation CPU élevée (> 80%)
+          - alert: HighCPUUsage
+            expr: |
+              (rate(container_cpu_usage_seconds_total[5m]) * 100) > 80
+            for: 5m
+            labels:
+              severity: warning
+              component: kubernetes
+            annotations:
+              summary: "High CPU usage"
+              description: "L'utilisation CPU du pod {{ $labels.pod }} dépasse 80%."
+          
+          # Alerte : Utilisation mémoire élevée (> 90%)
+          - alert: HighMemoryUsage
+            expr: |
+              (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+            for: 5m
+            labels:
+              severity: warning
+              component: kubernetes
+            annotations:
+              summary: "High memory usage"
+              description: "L'utilisation mémoire du pod {{ $labels.pod }} dépasse 90%."

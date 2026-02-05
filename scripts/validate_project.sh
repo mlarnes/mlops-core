@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Script de validation complète du projet MLOps - Semaine 1
+# Script de validation complète du projet MLOps - Phase 1
 # Usage: ./scripts/validate_project.sh
 
-echo "🔍 Validation complète du projet MLOps - Semaine 1"
+echo "🔍 Validation complète du projet MLOps - Phase 1"
 echo "================================================"
 
 # Variables

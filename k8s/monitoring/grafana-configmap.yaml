@@ -1,0 +1,56 @@
+# Configuration Grafana : Datasources, dashboards, authentification
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: mlops
+  labels:
+    app: grafana
+    component: monitoring
+data:
+  grafana.ini: |
+    [server]
+    root_url = http://grafana-service.mlops.svc.cluster.local:3000
+    
+    [datasources]
+    # Datasource Prometheus (configuré via provisioning)
+    
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/iris-api-overview.json
+    
+    [users]
+    allow_sign_up = false
+    default_theme = dark
+    
+    [auth.anonymous]
+    enabled = true
+    org_role = Viewer
+    
+    [log]
+    mode = console
+    level = info
+    
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service.mlops.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+        jsonData:
+          timeInterval: "15s"
+  
+  dashboard-provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards

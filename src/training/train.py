@@ -1,7 +1,7 @@
 """
 Module d'entraînement du modèle ML
 Modèle de classification sur le dataset Iris
-Intégration MLflow pour le tracking des expériences (Semaine 4)
+Intégration MLflow pour le tracking des expériences (Phase 4)
 Lit les paramètres depuis params.yaml avec validation Pydantic
 """
 
@@ -12,8 +12,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
+import joblib
 import mlflow
 import mlflow.sklearn
+from mlflow.tracking import MlflowClient
 import pandas as pd
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
@@ -24,7 +26,8 @@ from src.evaluation.evaluate import evaluate_model
 
 # Configuration du logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -59,10 +62,103 @@ def load_data(
         df["target"] = iris.target
 
         train_df, test_df = train_test_split(
-            df, test_size=test_size, random_state=random_state, stratify=df["target"]
+            df,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=df["target"],
         )
 
         return train_df, test_df, iris_metadata
+
+def _configure_hyperparameters(
+    n_estimators: Optional[int],
+    max_depth: Optional[int],
+    random_state: Optional[int],
+    test_size: Optional[float],
+) -> tuple[int, Optional[int], int, float]:
+    """Lit la configuration applicative et applique les éventuels overrides CLI.
+
+    Cette fonction est surtout là pour clarifier `train_model` et raconter
+    explicitement la logique de fallback (params.yaml → arguments optionnels).
+    """
+    config = get_config()
+    resolved_n_estimators = n_estimators or config.train.n_estimators
+    resolved_max_depth = max_depth or config.train.max_depth
+    resolved_random_state = random_state or config.train.random_state
+    resolved_test_size = test_size or config.data.test_size
+
+    return (
+        resolved_n_estimators,
+        resolved_max_depth,
+        resolved_random_state,
+        resolved_test_size,
+    )
+
+
+def _configure_mlflow(experiment_name: str) -> None:
+    """Configure MLflow pour le tracking (local ou serveur HTTP).
+
+    Cette fonction encapsule simplement la logique de :
+    - lecture de `MLFLOW_TRACKING_URI`,
+    - configuration du backend,
+    - création (ou récupération) de l'expérience.
+    """
+    # Configuration MLflow (toujours activé)
+    # Support de backends distants via variable d'environnement
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    if mlflow_tracking_uri:
+        mlflow.set_tracking_uri(mlflow_tracking_uri)
+        logger.info(f"📊 MLflow Tracking URI: {mlflow_tracking_uri}")
+    else:
+        logger.info("📊 MLflow Tracking URI: local (mlruns/)")
+
+    # Configurer l'expérience (doit être fait même sans tracking URI personnalisé)
+    mlflow.set_experiment(experiment_name)
+
+
+def _prepare_features(
+    train_df: pd.DataFrame, test_df: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, list[str]]:
+    """Prépare les features/targets dans un seul endroit.
+
+    Cela évite de disperser les sélections de colonnes dans `train_model` et
+    rend explicite la structure du dataset Iris.
+    """
+    feature_cols = [
+        "sepal length (cm)",
+        "sepal width (cm)",
+        "petal length (cm)",
+        "petal width (cm)",
+    ]
+    X_train = train_df[feature_cols].values
+    y_train = train_df["target"].values
+    X_test = test_df[feature_cols].values
+    y_test = test_df["target"].values
+    return X_train, X_test, y_train, y_test, feature_cols
+
+
+def _save_local_artifacts(
+    models_dir: Path,
+    model: RandomForestClassifier,
+    metadata: dict,
+    metrics: dict,
+) -> None:
+    """Sauvegarde la copie "runtime" du modèle pour l'API.
+
+    Dans ce projet de portfolio :
+    - MLflow reste la source de vérité analytique (UI, runs, registry),
+    - mais l'API charge le modèle depuis une copie maîtrisée dans `models/`
+      (PVC partagé avec le job d'entraînement en mode Kubernetes).
+    """
+    models_dir.mkdir(exist_ok=True)
+
+    # Sauvegarder le modèle au format joblib pour l'API
+    joblib.dump(model, models_dir / "model.joblib")
+
+    # Sauvegarder metadata.json et metrics.json (consommés par l'API au startup)
+    for filename, data in [("metadata.json", metadata), ("metrics.json", metrics)]:
+        path = models_dir / filename
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def train_model(
@@ -90,23 +186,20 @@ def train_model(
     Returns:
         Tuple[RandomForestClassifier, dict]: Modèle entraîné et métadonnées
     """
-    config = get_config()
-    n_estimators = n_estimators or config.train.n_estimators
-    max_depth = max_depth or config.train.max_depth
-    random_state = random_state or config.train.random_state
-    test_size = test_size or config.data.test_size
+    (
+        n_estimators,
+        max_depth,
+        random_state,
+        test_size,
+    ) = _configure_hyperparameters(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        random_state=random_state,
+        test_size=test_size,
+    )
 
     # Configuration MLflow (toujours activé)
-    # Support GCS backend en production via variable d'environnement
-    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-    if mlflow_tracking_uri:
-        mlflow.set_tracking_uri(mlflow_tracking_uri)
-        logger.info(f"📊 MLflow Tracking URI: {mlflow_tracking_uri}")
-    else:
-        logger.info("📊 MLflow Tracking URI: local (mlruns/)")
-
-    # Configurer l'expérience (doit être fait même sans tracking URI personnalisé)
-    mlflow.set_experiment(experiment_name)
+    _configure_mlflow(experiment_name=experiment_name)
 
     # Générer le nom du run si non fourni
     if run_name is None:
@@ -118,17 +211,10 @@ def train_model(
         logger.info("🌱 Chargement du dataset Iris...")
         train_df, test_df, iris_metadata = load_data(test_size, random_state)
 
-        # Séparer features et target
-        feature_cols = [
-            "sepal length (cm)",
-            "sepal width (cm)",
-            "petal length (cm)",
-            "petal width (cm)",
-        ]
-        X_train = train_df[feature_cols].values
-        y_train = train_df["target"].values
-        X_test = test_df[feature_cols].values
-        y_test = test_df["target"].values
+        # Séparer features et target (centralisé pour plus de lisibilité)
+        X_train, X_test, y_train, y_test, feature_cols = _prepare_features(
+            train_df, test_df
+        )
 
         # Hyperparamètres et dimensions
         hyperparams = {
@@ -172,15 +258,12 @@ def train_model(
         # Évaluation
         metrics, metadata = evaluate_model(model, X_test, y_test, iris_metadata)
 
-        # Créer le dossier models pour sauvegarder metadata.json et metrics.json
-        models_dir = Path("models")
-        models_dir.mkdir(exist_ok=True)
-
-        # Sauvegarde dans MLflow (source de vérité)
+        # Sauvegarde dans MLflow (source de vérité, avec Model Registry)
+        mlflow_model_name = "IrisClassifier"
         mlflow.sklearn.log_model(
             model,
             "model",
-            registered_model_name="IrisClassifier",
+            registered_model_name=mlflow_model_name,
             input_example=X_test[0:1],
         )
         # Capturer l'URI du run MLflow pour référence
@@ -195,6 +278,16 @@ def train_model(
             f"mlruns/{mlflow_experiment_id}/{mlflow_run_id}" if active_run else None
         )
 
+        # Récupérer la version associée dans le Model Registry
+        mlflow_model_version: Optional[str] = None
+        if mlflow_run_id:
+            client = MlflowClient()
+            latest_versions = client.get_latest_versions(mlflow_model_name)
+            for mv in latest_versions:
+                if mv.run_id == mlflow_run_id:
+                    mlflow_model_version = mv.version
+                    break
+
         # Enrichir et sauvegarder les métadonnées (toutes les infos en une seule fois)
         metadata.update(
             {
@@ -204,19 +297,27 @@ def train_model(
                 "random_state": random_state,
                 "n_features": n_features,
                 "n_samples": n_samples,
-                # Informations MLflow
+                # Informations MLflow (run)
                 "mlflow_run_uri": mlflow_run_uri,
                 "mlflow_experiment_name": experiment_name,
                 "mlflow_run_name": run_name,
                 "mlflow_run_id": mlflow_run_id,
                 "mlflow_relative_path": mlflow_relative_path,
+                # Informations Model Registry
+                "mlflow_model_name": mlflow_model_name,
+                "mlflow_model_version": mlflow_model_version,
+                # Local model path (copie runtime pour l'API, montée sur PVC en K8s)
+                "local_model_path": str(Path("models") / "model.joblib"),
             }
         )
 
-        # Sauvegarder metadata.json et metrics.json dans models/
-        for filename, data in [("metadata.json", metadata), ("metrics.json", metrics)]:
-            path = models_dir / filename
-            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Créer/mettre à jour la copie "runtime" du modèle pour l'API
+        _save_local_artifacts(
+            models_dir=Path("models"),
+            model=model,
+            metadata=metadata,
+            metrics=metrics,
+        )
 
         mlflow.log_dict(metadata, "metadata.json")
         logger.info("🔗 MLflow UI: mlflow ui")

@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iris-train-job
+  namespace: mlops
+  labels:
+    app: iris-train
+    component: training
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: iris-train
+        component: training
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: iris-train
+          image: iris-api:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /app
+          command: ["python"]
+          args: ["-m", "src.training.train"]
+          envFrom:
+            - configMapRef:
+                name: iris-api-config
+          env:
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                secretKeyRef:
+                  name: iris-api-secrets
+                  key: MLFLOW_TRACKING_URI
+          volumeMounts:
+            - name: models-volume
+              mountPath: /app/models
+              readOnly: false
+      volumes:
+        - name: models-volume
+          persistentVolumeClaim:
+            claimName: models-pvc
+

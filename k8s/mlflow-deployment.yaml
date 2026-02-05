@@ -1,0 +1,124 @@
+# MLflow Server : Serveur de tracking MLflow pour le portfolio
+# Déploie un serveur MLflow accessible depuis les pods de l'API
+# Fait tourner un seul pod qui exécute le serveur MLflow
+# ⚠️ Pour production : Utiliser un backend SQL (PostgreSQL) et un artifact store (GCS/S3)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-server
+  namespace: mlops
+  labels:
+    app: mlflow-server
+    component: mlflow
+    version: v1
+  annotations:
+    description: "Serveur MLflow pour le tracking des expériences ML"
+spec:
+  replicas: 1  # MLflow server est généralement un singleton
+  strategy:
+    type: Recreate  # Pas de rolling update pour un serveur avec état (fichiers locaux)
+  selector:
+    matchLabels:
+      app: mlflow-server
+  template:
+    metadata:
+      labels:
+        app: mlflow-server
+        component: mlflow
+        version: v1
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      terminationGracePeriodSeconds: 30
+      
+      # Volume persistant : MLflow stocke les runs dans /app/mlruns
+      # Utilise un PersistentVolumeClaim pour un stockage plus propre et portable
+      volumes:
+      - name: mlruns-volume
+        persistentVolumeClaim:
+          claimName: mlflow-pvc
+      
+      containers:
+      - name: mlflow-server
+        image: ghcr.io/mlflow/mlflow:v2.9.2  # Image officielle MLflow
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 5000  # Port par défaut de MLflow
+          name: http
+          protocol: TCP
+        
+        # Variables d'environnement MLflow
+        env:
+        - name: MLFLOW_BACKEND_STORE_URI
+          value: "file:///app/mlruns"  # Backend store local (fichiers)
+        - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+          value: "file:///app/mlruns"  # Artifact store local
+        
+        # Volume mount : répertoire de stockage des runs MLflow
+        volumeMounts:
+        - name: mlruns-volume
+          mountPath: /app/mlruns  # MLflow stocke tout dans /app/mlruns
+          readOnly: false
+        
+        # Health check : MLflow expose /health
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Ressources
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # Sécurité
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        
+        # Commande : Lancer MLflow server
+        command:
+        - mlflow
+        args:
+        - server
+        - --host
+        - "0.0.0.0"  # Écouter sur toutes les interfaces
+        - --port
+        - "5000"
+        - --backend-store-uri
+        - "file:///app/mlruns"
+        - --default-artifact-root
+        - "file:///app/mlruns"
+
